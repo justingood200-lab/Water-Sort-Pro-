@@ -1,0 +1,17 @@
+
+{
+  "name": "Water Sort Pro 輔助工具",
+  "short_name": "水排序助手",
+  "description": "專業級 Water Sort Puzzle 紀錄與 AI 解題模擬器",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3504/3504746.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
