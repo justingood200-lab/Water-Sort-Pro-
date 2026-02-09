@@ -1,10 +1,66 @@
 
-<!doctype html>
-<html>
-<head><link rel="stylesheet" href="/index.css">
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Water Sort Pro | 專業輔助工具</title>
+    
+    <!-- PWA 核心設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="水排序助手">
+    <meta name="theme-color" content="#0f172a">
+    
+    <!-- App 圖示 -->
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3504/3504746.png">
+    <link rel="manifest" href="manifest.json">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: env(safe-area-inset-bottom);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .tube-gradient {
+            background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+        }
+        .slot-animation {
+            transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        ::-webkit-scrollbar { display: none; }
+        
+        /* 增加試管的光影質感 */
+        .tube-glass {
+            box-shadow: inset 0 0 15px rgba(255,255,255,0.05), 0 5px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+
+    <!-- 鎖定 React 18 避免 Error #31 -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom": "https://esm.sh/react-dom@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "react/": "https://esm.sh/react@18.2.0/",
+        "react-dom/": "https://esm.sh/react-dom@18.2.0/"
+      }
+    }
+    </script>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body>
-
+    <div id="root"></div>
+    <script type="module">
+        import "https://esm.sh/run/tsx/index.tsx";
+    </script>
 <script type="module" src="/index.tsx"></script>
 </body>
 </html>

@@ -1,10 +1,10 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { ColorKey, ColorInfo, Move, SaveData } from './types';
-import { DEFAULT_PALETTE, INITIAL_TUBES, SLOT_COUNT } from './constants';
-import Tube from './components/Tube';
-import Palette from './components/Palette';
-import { solve } from './solver';
+import { ColorKey, ColorInfo, Move, SaveData } from './types.ts';
+import { DEFAULT_PALETTE, INITIAL_TUBES, SLOT_COUNT } from './constants.ts';
+import Tube from './components/Tube.tsx';
+import Palette from './components/Palette.tsx';
+import { solve } from './solver.ts';
 
 const STORAGE_KEY_SAVES = 'water-sort-saves-v3';
 
@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [isEditPaletteMode, setIsEditPaletteMode] = useState(false);
   const [isSavesOpen, setIsSavesOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [sourceTubeIndex, setSourceTubeIndex] = useState<number | null>(null);
 
   const [syncCodeInput, setSyncCodeInput] = useState('');
@@ -24,6 +25,7 @@ const App: React.FC = () => {
   const [currentStepIdx, setCurrentStepIdx] = useState(-1);
   const [isSolving, setIsSolving] = useState(false);
 
+  // 初始化加載
   useEffect(() => {
     const savedSaves = localStorage.getItem(STORAGE_KEY_SAVES);
     if (savedSaves) {
@@ -41,6 +43,7 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // 存檔同步至本地
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_SAVES, JSON.stringify(saves));
   }, [saves]);
@@ -49,7 +52,6 @@ const App: React.FC = () => {
     const newSaves = [...saves];
     newSaves[index] = { tubes, palette, timestamp: Date.now() };
     setSaves(newSaves);
-    alert(`存檔 ${index + 1} 已成功儲存於本地。`);
   };
 
   const handleLoad = (index: number) => {
@@ -60,7 +62,6 @@ const App: React.FC = () => {
       setSolutionSteps([]);
       setCurrentStepIdx(-1);
       setIsSavesOpen(false);
-      alert(`已載入存檔 ${index + 1}`);
     }
   };
 
@@ -68,18 +69,10 @@ const App: React.FC = () => {
     try {
       const currentData = { tubes, palette, timestamp: Date.now() };
       const jsonStr = JSON.stringify(currentData);
-      const encoder = new TextEncoder();
-      const data = encoder.encode(jsonStr);
-      let binString = "";
-      for (let i = 0; i < data.length; i++) {
-        binString += String.fromCharCode(data[i]);
-      }
-      const code = btoa(binString);
+      const code = btoa(encodeURIComponent(jsonStr));
       setSyncCodeInput(code);
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(code).then(() => {
-          alert('同步代碼已複製！');
-        });
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => alert('同步代碼已複製！'));
       }
     } catch (e) {
       alert('產生同步碼失敗。');
@@ -87,81 +80,32 @@ const App: React.FC = () => {
   };
 
   const loadFromSyncCode = () => {
-    let input = syncCodeInput.replace(/貼上了/g, '').replace(/\s/g, '').trim();
-    if (!input) {
-      alert('請輸入代碼');
-      return;
-    }
-
-    const tryParse = (str: string) => {
-      try {
-        const searchStr = str.includes('%22tubes%22') ? decodeURIComponent(str) : str;
-        const start = searchStr.indexOf('{"tubes":');
-        const end = searchStr.lastIndexOf('}');
-        if (start !== -1 && end !== -1) {
-          const json = searchStr.substring(start, end + 1);
-          const obj = JSON.parse(json);
-          if (obj && obj.tubes) return obj;
-        }
-      } catch (e) {}
-      return null;
-    };
-
-    let result = null;
-    result = tryParse(input) || tryParse(decodeURIComponent(input));
-
-    if (!result) {
-      try {
-        let b64 = input.replace(/[^A-Za-z0-9+/=]/g, '');
-        for (let pad = 0; pad < 3; pad++) {
-          try {
-            const bin = atob(b64 + "=".repeat(pad));
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            const decoded = new TextDecoder().decode(bytes);
-            result = tryParse(decoded) || tryParse(decodeURIComponent(decoded));
-            if (result) break;
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }
-
-    if (result) {
-      setTubes(result.tubes);
-      if (result.palette) setPalette(result.palette);
-      const coloredCount = result.tubes.flat().filter((c: string) => c !== 'UNKNOWN').length;
-      const tubeCount = result.tubes.length;
-      if (coloredCount === 0) {
-        alert(`✅ 數據還原成功！\n\n狀態：已載入 ${tubeCount} 根試管。\n提醒：目前的試管內「全是問號」，代表您備份時尚未填入顏色水。`);
-      } else {
-        alert(`🎉 數據恢復成功！\n\n已成功找回 ${tubeCount} 根試管與顏色挖掘進度。`);
+    try {
+      const decoded = decodeURIComponent(atob(syncCodeInput.trim()));
+      const result = JSON.parse(decoded);
+      if (result && result.tubes) {
+        setTubes(result.tubes);
+        if (result.palette) setPalette(result.palette);
+        setSolutionSteps([]);
+        setCurrentStepIdx(-1);
+        setIsSavesOpen(false);
+        setSyncCodeInput('');
+        alert('數據同步成功！');
       }
-      setIsSavesOpen(false);
-      setSyncCodeInput('');
-      setSolutionSteps([]);
-      setCurrentStepIdx(-1);
-    } else {
-      alert('❌ 代碼解析失敗。請確認是否複製完整。');
+    } catch (e) {
+      alert('無效的同步代碼。');
     }
   };
-
-  const resetCurrentTubes = useCallback(() => {
-    if (confirm('確定要清除目前的試管資料嗎？')) {
-      setTubes(INITIAL_TUBES);
-      setSolutionSteps([]);
-      setCurrentStepIdx(-1);
-      setSourceTubeIndex(null);
-    }
-  }, []);
 
   const handleAutoSolve = () => {
     const isAllUnknown = tubes.flat().every(c => c === 'UNKNOWN');
     if (isAllUnknown) {
-      alert('目前的試管全是空的，請先選擇顏色填入試管後再讓 AI 解題！');
+      alert('請先填入試管顏色再讓 AI 解題！');
       return;
     }
 
     setIsSolving(true);
+    // 稍微延遲讓 UI 顯示 Loading 狀態
     setTimeout(() => {
       try {
         const result = solve(tubes);
@@ -169,14 +113,14 @@ const App: React.FC = () => {
         if (result.error && result.steps.length === 0) {
           alert(result.error);
         } else {
-          if (result.warning) alert(result.warning);
+          if (result.warning) console.warn(result.warning);
           setSolutionSteps(result.steps);
           setCurrentStepIdx(0);
           setIsSimulationMode(true);
         }
       } catch (e) {
         setIsSolving(false);
-        alert('計算過程發生錯誤。');
+        alert('解題發生錯誤。');
       }
     }, 100);
   };
@@ -187,6 +131,7 @@ const App: React.FC = () => {
     const newTubes = [...tubes];
     const sourceTube = [...newTubes[move.from]];
     const destTube = [...newTubes[move.to]];
+    
     const sTopIdx = sourceTube.findIndex(c => c !== 'UNKNOWN');
     const dTopIdx = destTube.findIndex(c => c !== 'UNKNOWN');
     const targetDIdx = dTopIdx === -1 ? SLOT_COUNT : dTopIdx;
@@ -203,7 +148,6 @@ const App: React.FC = () => {
     if (currentStepIdx === solutionSteps.length - 1) {
       setSolutionSteps([]);
       setCurrentStepIdx(-1);
-      alert('解題步驟執行完畢！');
     } else {
       setCurrentStepIdx(prev => prev + 1);
     }
@@ -214,14 +158,14 @@ const App: React.FC = () => {
     palette.forEach(c => counts[c.key] = 0);
     tubes.flat().forEach(color => {
       if (color !== 'UNKNOWN' && counts[color] !== undefined) {
-        counts[color] = (counts[color] || 0) + 1;
+        counts[color]++;
       }
     });
     return counts;
   }, [tubes, palette]);
 
   const handleTubeClick = (tubeIdx: number) => {
-    if (!isSimulationMode || solutionSteps.length > 0) return;
+    if (!isSimulationMode) return;
     
     if (sourceTubeIndex === null) {
       const topColorIdx = tubes[tubeIdx].findIndex(c => c !== 'UNKNOWN');
@@ -232,18 +176,22 @@ const App: React.FC = () => {
         setSourceTubeIndex(null);
         return;
       }
+      // 手動模擬移動邏輯
       const sourceTube = [...tubes[sourceTubeIndex]];
       const destTube = [...tubes[tubeIdx]];
       const sTopIdx = sourceTube.findIndex(c => c !== 'UNKNOWN');
       const dTopIdx = destTube.findIndex(c => c !== 'UNKNOWN');
       const sourceColor = sourceTube[sTopIdx];
+      
       let blocksToMove = 0;
       for (let i = sTopIdx; i < SLOT_COUNT; i++) {
         if (sourceTube[i] === sourceColor) blocksToMove++;
         else break;
       }
+      
       const destAvailable = dTopIdx === -1 ? SLOT_COUNT : dTopIdx;
       const isColorMatch = dTopIdx === -1 || destTube[dTopIdx] === sourceColor;
+      
       if (isColorMatch && destAvailable > 0) {
         const actualMoveCount = Math.min(blocksToMove, destAvailable);
         const newTubes = [...tubes];
@@ -273,78 +221,78 @@ const App: React.FC = () => {
   };
 
   const currentMove = solutionSteps[currentStepIdx];
-  const isExcavationMove = useMemo(() => {
-      if (!currentMove) return false;
-      const sourceTube = tubes[currentMove.from];
-      return sourceTube.includes('UNKNOWN');
-  }, [currentMove, tubes]);
 
   return (
-    <div className="min-h-screen flex flex-col p-4 pb-80 md:pb-64 lg:p-8">
-      <header className="flex flex-wrap justify-between items-center gap-4 mb-6 sticky top-0 bg-slate-900/95 backdrop-blur-md py-3 z-40 border-b border-slate-700/50 -mx-4 px-4 lg:mx-0 lg:rounded-b-2xl">
+    <div className="min-h-screen flex flex-col p-4 pb-80 md:pb-64 lg:p-8 max-w-7xl mx-auto w-full">
+      <header className="flex flex-wrap justify-between items-center gap-4 mb-6 sticky top-0 bg-slate-900/90 backdrop-blur-md py-4 z-40 border-b border-slate-700/50 -mx-4 px-4 lg:mx-0 lg:rounded-b-2xl shadow-xl">
         <div className="flex flex-col">
-          <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 leading-tight">
+          <h1 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 leading-none">
             Water Sort Pro
           </h1>
-          <div className="flex gap-2 items-center">
-            <span className={`w-2 h-2 rounded-full ${isSolving ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></span>
-            <p className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{isSolving ? 'Solving...' : 'Ready'}</p>
-          </div>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-1">Professional Game Assistant</p>
         </div>
         
         <div className="flex gap-2">
-          <button onClick={() => setIsSavesOpen(true)} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold border border-slate-700 active:bg-slate-700 transition-transform active:scale-95">📂 存檔</button>
-          <button onClick={handleAutoSolve} disabled={isSolving} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black shadow-lg active:scale-95 disabled:opacity-50">AI 解題</button>
-          <button onClick={() => { setIsSimulationMode(!isSimulationMode); setSolutionSteps([]); setSourceTubeIndex(null); }} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isSimulationMode ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-            {isSimulationMode ? '模擬' : '編輯'}
+          <button onClick={() => setIsSavesOpen(true)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-700 active:scale-95 transition-all">📂 存檔與同步</button>
+          <button onClick={handleAutoSolve} disabled={isSolving} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-[0_0_20px_rgba(79,70,229,0.4)] active:scale-95 disabled:opacity-50 transition-all">
+            {isSolving ? '計算中...' : 'AI 智慧解題'}
+          </button>
+          <button 
+            onClick={() => { setIsSimulationMode(!isSimulationMode); setSolutionSteps([]); setSourceTubeIndex(null); }} 
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${isSimulationMode ? 'bg-orange-500 border-orange-400 text-white shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-slate-700 border-slate-600 text-slate-300'}`}
+          >
+            {isSimulationMode ? '🎮 模擬中' : '✍️ 編輯中'}
           </button>
         </div>
       </header>
 
+      {/* 側邊存檔選單 */}
       {isSavesOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSavesOpen(false)}></div>
-          <div className="relative w-80 bg-slate-800 h-full p-6 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-right duration-200">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setIsSavesOpen(false)}></div>
+          <div className="relative w-85 bg-slate-900 h-full p-8 shadow-2xl flex flex-col gap-6 animate-in slide-in-from-right duration-300 border-l border-slate-800">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold">存檔與同步</h2>
-              <button onClick={() => setIsSavesOpen(false)} className="text-slate-400 p-1 text-xl">✕</button>
+              <h2 className="text-xl font-black text-white italic">ARCHIVES</h2>
+              <button onClick={() => setIsSavesOpen(false)} className="text-slate-500 hover:text-white transition-colors">✕</button>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">本地存檔 (無需登入)</p>
+            
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-hide">
+              <p className="text-[10px] text-slate-600 uppercase font-black tracking-[0.2em]">Local Save Slots</p>
               {saves.map((s, i) => (
-                <div key={i} className="p-3 bg-slate-900 rounded-xl border border-slate-700">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold text-slate-400">槽位 {i+1}</span>
-                    <span className="text-[9px] text-slate-500">{s ? new Date(s.timestamp).toLocaleTimeString() : '空'}</span>
+                <div key={i} className={`p-4 rounded-2xl border transition-all ${s ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-900 border-slate-800 border-dashed opacity-50'}`}>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-black text-indigo-400">SLOT {i+1}</span>
+                    <span className="text-[9px] text-slate-500 font-mono">{s ? new Date(s.timestamp).toLocaleString() : 'EMPTY'}</span>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => handleSave(i)} className="flex-1 py-1.5 text-[10px] bg-emerald-900/40 text-emerald-400 rounded hover:bg-emerald-900/60 active:scale-95 transition-all">儲存</button>
-                    {s && <button onClick={() => handleLoad(i)} className="flex-1 py-1.5 text-[10px] bg-indigo-900/40 text-indigo-400 rounded hover:bg-indigo-900/60 active:scale-95 transition-all">載入</button>}
+                    <button onClick={() => { handleSave(i); alert('已存檔'); }} className="flex-1 py-2 text-[10px] bg-emerald-600/10 text-emerald-400 border border-emerald-600/20 rounded-lg font-bold hover:bg-emerald-600/20 transition-all">SAVE</button>
+                    {s && <button onClick={() => handleLoad(i)} className="flex-1 py-2 text-[10px] bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/20">LOAD</button>}
                   </div>
                 </div>
               ))}
-              <div className="pt-4 space-y-3">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">跨裝置同步</p>
+              
+              <div className="pt-6 space-y-4">
+                <p className="text-[10px] text-slate-600 uppercase font-black tracking-[0.2em]">Cross-Device Sync</p>
                 <textarea 
                   value={syncCodeInput}
                   onChange={(e) => setSyncCodeInput(e.target.value)}
-                  placeholder="在此貼上同步代碼..."
-                  className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-300 focus:border-indigo-500 focus:outline-none"
+                  placeholder="Paste sync code here..."
+                  className="w-full h-28 bg-black/40 border border-slate-800 rounded-2xl p-4 text-[11px] font-mono text-indigo-300 focus:border-indigo-500 focus:outline-none transition-all resize-none"
                 />
                 <div className="flex gap-2">
-                  <button onClick={generateSyncCode} className="flex-1 py-2 bg-indigo-600/20 text-indigo-400 border border-indigo-600/30 text-[10px] font-bold rounded-lg active:scale-95 transition-all">📤 複製代碼</button>
-                  <button onClick={loadFromSyncCode} className="flex-1 py-2 bg-indigo-600 text-white text-[10px] font-bold rounded-lg active:scale-95 transition-all shadow-lg">📥 數據還原</button>
+                  <button onClick={generateSyncCode} className="flex-1 py-3 bg-slate-800 text-slate-300 text-[10px] font-black rounded-xl active:scale-95 transition-all">COPY CODE</button>
+                  <button onClick={loadFromSyncCode} className="flex-1 py-3 bg-indigo-600 text-white text-[10px] font-black rounded-xl active:scale-95 transition-all shadow-lg shadow-indigo-600/30">RESTORE DATA</button>
                 </div>
               </div>
             </div>
-            <div className="mt-auto pt-4 border-t border-slate-700">
-              <button onClick={resetCurrentTubes} className="w-full py-2 bg-red-900/20 text-red-400 text-xs font-bold rounded-lg hover:bg-red-900/30 transition-all">🗑️ 清除當前盤面</button>
-            </div>
+
+            <button onClick={() => { if(confirm('確定清除？')) setTubes(INITIAL_TUBES); }} className="w-full py-4 bg-red-900/10 text-red-500 text-xs font-black rounded-2xl border border-red-900/20 hover:bg-red-900/20 transition-all">RESET CURRENT BOARD</button>
           </div>
         </div>
       )}
 
-      <main className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-x-4 gap-y-12 justify-items-center mb-8">
+      {/* 試管容器 */}
+      <main className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-x-6 gap-y-14 justify-items-center mb-12 py-8">
         {tubes.map((tubeData, idx) => (
           <Tube 
             key={idx} 
@@ -353,53 +301,55 @@ const App: React.FC = () => {
             palette={palette}
             isSource={sourceTubeIndex === idx || currentMove?.from === idx}
             isTarget={currentMove?.to === idx}
-            isExcavationTarget={isExcavationMove && currentMove?.from === idx}
             onSlotClick={(slotIdx) => handleSlotClick(idx, slotIdx)}
           />
         ))}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] z-40">
+      {/* 底部導覽面板 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-2xl border-t border-slate-800 p-6 pb-[calc(2rem+env(safe-area-inset-bottom))] z-40 shadow-[0_-20px_40px_rgba(0,0,0,0.4)]">
         <div className="max-w-5xl mx-auto">
           {solutionSteps.length > 0 ? (
-            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-              <div className="flex items-center justify-between bg-indigo-900/30 p-4 rounded-2xl border border-indigo-500/20 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl shadow-lg transition-colors ${isExcavationMove ? 'bg-orange-600 animate-pulse text-white' : 'bg-indigo-600 text-white'}`}>
-                    {isExcavationMove ? '🔍' : currentStepIdx + 1}
+            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-8 duration-500">
+              <div className="flex items-center justify-between bg-indigo-600/10 p-5 rounded-3xl border border-indigo-500/20 shadow-inner">
+                <div className="flex items-center gap-6">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex flex-col items-center justify-center shadow-2xl shadow-indigo-600/40">
+                    <span className="text-[10px] font-black opacity-60">STEP</span>
+                    <span className="text-2xl font-black leading-none">{currentStepIdx + 1}</span>
                   </div>
                   <div>
-                    <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">
-                        {isExcavationMove ? '挖掘路徑：揭開問號' : '排序路徑'}
-                    </p>
-                    <p className="text-base font-black text-white">
-                      #{currentMove.from + 1} ➔ #{currentMove.to + 1}
-                    </p>
+                    <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">MOVING PROTOCOL</p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl font-black text-white">#{currentMove.from + 1}</span>
+                      <span className="text-indigo-500 text-lg">➔</span>
+                      <span className="text-xl font-black text-white">#{currentMove.to + 1}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => { setSolutionSteps([]); setCurrentStepIdx(-1); }} className="px-3 py-3 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold active:bg-slate-700">放棄</button>
-                  <button onClick={executeCurrentStep} className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-sm font-black shadow-lg active:scale-95 hover:bg-indigo-500 transition-all">下一步</button>
+                <div className="flex gap-3">
+                  <button onClick={() => { setSolutionSteps([]); setCurrentStepIdx(-1); }} className="px-5 py-4 bg-slate-800 text-slate-400 rounded-2xl text-xs font-black hover:text-white transition-all">EXIT</button>
+                  <button onClick={executeCurrentStep} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black shadow-xl shadow-indigo-600/30 active:scale-95 transition-all">NEXT STEP</button>
                 </div>
               </div>
-              <div className="flex items-center gap-4 px-2">
-                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${((currentStepIdx + 1) / solutionSteps.length) * 100}%` }}></div>
+              <div className="px-2">
+                <div className="flex justify-between text-[9px] font-black text-slate-600 mb-2 tracking-tighter">
+                  <span>PROGRESS</span>
+                  <span>{Math.round(((currentStepIdx + 1) / solutionSteps.length) * 100)}%</span>
                 </div>
-                <p className="text-[10px] text-slate-500 font-mono whitespace-nowrap">{currentStepIdx + 1} / {solutionSteps.length}</p>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                  <div className="h-full bg-gradient-to-r from-indigo-600 to-blue-400 transition-all duration-500 shadow-[0_0_10px_rgba(79,70,229,0.5)]" style={{ width: `${((currentStepIdx + 1) / solutionSteps.length) * 100}%` }}></div>
+                </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  {isEditPaletteMode ? '調色盤編輯模式' : '點擊色球後填入試管'}
-                </span>
+              <div className="flex justify-between items-end px-1 mb-1">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">Color Matrix Controller</span>
                 <button 
                   onClick={() => setIsEditPaletteMode(!isEditPaletteMode)}
-                  className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${isEditPaletteMode ? 'bg-indigo-600 text-white' : 'text-indigo-400'}`}
+                  className={`text-[10px] font-black px-4 py-1.5 rounded-full transition-all border ${isEditPaletteMode ? 'bg-indigo-600 border-indigo-400 text-white' : 'text-slate-400 border-slate-800'}`}
                 >
-                  {isEditPaletteMode ? '完成編輯' : '修改顏色名稱'}
+                  {isEditPaletteMode ? 'SAVE CONFIG' : 'EDIT COLORS'}
                 </button>
               </div>
               <Palette 

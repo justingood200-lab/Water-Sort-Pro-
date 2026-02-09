@@ -8,15 +8,14 @@ function boardToString(board: Board): string {
   return board.map(tube => tube.join(',')).join('|');
 }
 
-// 判斷是否全解或階段性全解（已知顏色都歸類且沒有問號被壓住）
+// 判定是否達成最終勝利條件或挖掘目標
 function isSolved(board: Board): boolean {
   return board.every(tube => {
     const nonUnknown = tube.filter(c => c !== 'UNKNOWN');
     if (nonUnknown.length === 0) return true;
-    // 如果還有問號，但問號上方還有顏色，不算解開
-    const firstUnknownIdx = tube.indexOf('UNKNOWN');
     
-    // Fix: Replace findLastIndex with a manual search to support older ES targets (e.g., pre-ES2023)
+    // 如果還有問號，但問號上方壓著顏色，視為未挖掘完成
+    const firstUnknownIdx = tube.indexOf('UNKNOWN');
     let lastColorIdx = -1;
     for (let i = tube.length - 1; i >= 0; i--) {
       if (tube[i] !== 'UNKNOWN') {
@@ -24,25 +23,21 @@ function isSolved(board: Board): boolean {
         break;
       }
     }
-    
     if (firstUnknownIdx !== -1 && lastColorIdx > firstUnknownIdx) return false;
     
-    // 如果已知顏色未滿且不一致，不算解開
-    if (nonUnknown.length > 0 && nonUnknown.length < SLOT_COUNT) {
-        // 除非全場已經沒有該顏色了
-        return false;
-    }
+    // 如果已知顏色未湊滿 4 個且還有剩餘顏色在別處，不算解開
+    if (nonUnknown.length > 0 && nonUnknown.length < SLOT_COUNT) return false;
+    
     return nonUnknown.every(c => c === nonUnknown[0]);
   });
 }
 
-// 計算當前盤面有多少問號被壓住（挖掘深度總和）
-function getUnknownBlockedScore(board: Board): number {
+// 挖掘權重計算：計算有多少問號被壓在非問號色塊下方
+function getExcavationScore(board: Board): number {
   let score = 0;
   board.forEach(tube => {
     const firstUnknownIdx = tube.indexOf('UNKNOWN');
     if (firstUnknownIdx !== -1) {
-      // 計算問號上方有多少個非 UNKNOWN 的格子
       for (let i = 0; i < firstUnknownIdx; i++) {
         if (tube[i] !== 'UNKNOWN') score++;
       }
@@ -69,13 +64,13 @@ function getPossibleMoves(board: Board): Move[] {
       if (i === j) continue;
       const destTube = board[j];
       const dTopIdx = destTube.findIndex(c => c !== 'UNKNOWN');
-      
       const destAvailable = dTopIdx === -1 ? SLOT_COUNT : dTopIdx;
+      
       if (destAvailable === 0) continue;
 
       const isColorMatch = dTopIdx === -1 || destTube[dTopIdx] === sourceColor;
       if (isColorMatch) {
-        // 策略：不把純色瓶移向另一個空瓶
+        // 剪枝優化：不要無謂地將整管同色的液體移向空管（除非下方有問號需要挖掘）
         if (dTopIdx === -1 && blocksToMove === (SLOT_COUNT - sTopIdx)) {
             const isPure = sourceTube.slice(sTopIdx).every(c => c === sourceColor);
             const hasUnknownBelow = sourceTube.slice(sTopIdx).includes('UNKNOWN');
@@ -110,64 +105,54 @@ function applyMove(board: Board, move: Move): Board {
 }
 
 export function solve(initialTubes: Board): SolverResult {
-  const counts: Record<string, number> = {};
-  initialTubes.flat().forEach(c => {
-    if (c !== 'UNKNOWN') counts[c] = (counts[c] || 0) + 1;
-  });
-  
-  let warning = "";
-  const oddColors = Object.entries(counts).filter(([_, count]) => count % SLOT_COUNT !== 0);
-  if (oddColors.length > 0) {
-    warning = `發現 ${oddColors.length} 種顏色數量非 4 的倍數，將優先尋找「挖掘路徑」。`;
-  }
-
-  // BFS 搜尋，優先權：解開問號 > 完成排序
   const queue: { board: Board; path: Move[]; score: number }[] = [
-    { board: initialTubes, path: [], score: getUnknownBlockedScore(initialTubes) }
+    { board: initialTubes, path: [], score: getExcavationScore(initialTubes) }
   ];
   const visited = new Set<string>();
   visited.add(boardToString(initialTubes));
 
   let iterations = 0;
-  const MAX_ITERATIONS = 12000;
-  let best挖掘Path: Move[] = [];
-  let minBlockedScore = getUnknownBlockedScore(initialTubes);
+  const MAX_ITERATIONS = 15000;
+  let bestExcavationPath: Move[] = [];
+  let minExcavationScore = getExcavationScore(initialTubes);
 
   while (queue.length > 0) {
     iterations++;
-    const { board, path, score } = queue.shift()!;
+    const current = queue.shift()!;
 
-    // 如果所有問號都被揭開了，且這是一個合法的排序狀態
-    if (isSolved(board)) return { steps: path, warning };
+    if (isSolved(current.board)) return { steps: current.path };
 
-    // 紀錄目前為止能揭開最多問號的路徑（作為後備方案）
-    if (score < minBlockedScore) {
-        minBlockedScore = score;
-        best挖掘Path = path;
+    // 紀錄挖掘效果最好的路徑
+    if (current.score < minExcavationScore) {
+        minExcavationScore = current.score;
+        bestExcavationPath = current.path;
     }
 
     if (iterations > MAX_ITERATIONS) {
-        if (best挖掘Path.length > 0) {
-            return { steps: best挖掘Path, warning: "已達運算上限，為您提供目前的「最佳挖掘路徑」。" };
+        if (bestExcavationPath.length > 0) {
+            return { steps: bestExcavationPath, warning: "已達運算上限，為您提供挖掘效率最高的建議路徑。" };
         }
-        return { steps: [], error: "搜尋分支過多，建議手動移動幾步後再試。", warning };
+        return { steps: [], error: "搜尋空間過大，請先手動執行幾步後再試。" };
     }
 
-    const moves = getPossibleMoves(board);
+    const moves = getPossibleMoves(current.board);
     for (const move of moves) {
-      const nextBoard = applyMove(board, move);
+      const nextBoard = applyMove(current.board, move);
       const boardStr = boardToString(nextBoard);
       if (!visited.has(boardStr)) {
         visited.add(boardStr);
-        const nextScore = getUnknownBlockedScore(nextBoard);
-        queue.push({ board: nextBoard, path: [...path, move], score: nextScore });
+        queue.push({ 
+            board: nextBoard, 
+            path: [...current.path, move], 
+            score: getExcavationScore(nextBoard) 
+        });
       }
     }
   }
 
-  if (best挖掘Path.length > 0) {
-      return { steps: best挖掘Path, warning: "找不到完全分類解，為您提供「挖掘路徑」。" };
+  if (bestExcavationPath.length > 0) {
+      return { steps: bestExcavationPath, warning: "無法直接達成最終全解，提供挖掘優先路徑。" };
   }
 
-  return { steps: [], error: "目前盤面無解，請檢查顏色是否輸入錯誤。", warning };
+  return { steps: [], error: "目前盤面無解，請檢查顏色是否填寫正確。" };
 }
