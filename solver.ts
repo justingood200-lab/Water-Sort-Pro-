@@ -1,6 +1,6 @@
 
-import { ColorKey, Move, SolverResult } from './types';
-import { SLOT_COUNT } from './constants';
+import { ColorKey, Move, SolverResult } from './types.ts';
+import { SLOT_COUNT } from './constants.ts';
 
 type Board = ColorKey[][];
 

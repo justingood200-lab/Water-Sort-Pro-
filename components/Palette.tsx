@@ -1,6 +1,6 @@
 
 import React, { useRef } from 'react';
-import { ColorKey, ColorInfo } from '../types';
+import { ColorKey, ColorInfo } from '../types.ts';
 
 interface PaletteProps {
   palette: ColorInfo[];

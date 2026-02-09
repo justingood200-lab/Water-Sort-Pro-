@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ColorKey, ColorInfo } from '../types';
+import { ColorKey, ColorInfo } from '../types.ts';
 
 interface TubeProps {
   index: number;
